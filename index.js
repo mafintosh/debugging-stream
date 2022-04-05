@@ -1,22 +1,14 @@
 const { Duplex } = require('streamx')
 
 module.exports = class DebuggingStream extends Duplex {
-  constructor (stream, { random = Math.random, latency = {} } = {}) {
+  constructor (stream, { random = Math.random, latency = 0 } = {}) {
     super()
 
-    const { read = 0, connect = 0 } = latency
-
     this._random = random
-    this._latency = toRange(read)
+    this._latency = toRange(latency)
 
     this._queued = []
     this._ondrain = null
-    this._connecting = true
-
-    const c = toRange(connect)
-
-    this._start = 0
-    this._connectLatency = c.start + Math.round(this._random() * c.variance)
 
     this.stream = stream
 
@@ -49,21 +41,11 @@ module.exports = class DebuggingStream extends Duplex {
   }
 
   _queue (evt) {
-    let l = this._connectLatency + this._latency.start + Math.round(this._random() * this._latency.variance)
-    const first = this._connecting
+    const l = this._latency.start + Math.round(this._random() * this._latency.variance)
 
-    if (first) {
-      this._start = Date.now()
-    } else {
-      const delta = Math.min(Date.now() - this._start, this._connectLatency)
-      l -= delta
-    }
-
-    this._connecting = false
     this._queued.push(evt)
 
     setTimeout(() => {
-      if (first) this._connectLatency = 0
       evt.pending = false
       this._drain()
     }, l)
@@ -107,10 +89,6 @@ module.exports = class DebuggingStream extends Duplex {
   _final (cb) {
     this.stream.end()
     cb()
-  }
-
-  _latency () {
-    return this._start + Math.round(Math.random() * this._var)
   }
 }
 

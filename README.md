@@ -12,10 +12,7 @@ npm install debugging-stream
 const DebuggingStream = require('debugging-stream')
 
 const s = new DebuggingStream(anotherStream, {
-  latency: {
-    read: [100, 200] // add between 100-200ms read latency,
-    connect: [300, 500] // add between 300-500ms connect latency
-  }
+  latency: [100, 200] // add between 100-200ms read latency,
 })
 
 // s is a duplex stream like any other
