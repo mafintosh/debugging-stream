@@ -54,6 +54,8 @@ module.exports = class DebuggingStream extends Duplex {
     this.stream = stream
     this.latency = latency
     this.jitter = jitter
+    this.bytesWritten = 0
+    this.bytesRead = 0
     this.writeSpeed = writeSpeed
     this.readSpeed = readSpeed
     this.udx = true // for hypercore
@@ -63,6 +65,7 @@ module.exports = class DebuggingStream extends Duplex {
     this._finalCallback = null
 
     stream.on('data', (data) => {
+      this.bytesRead += data.byteLength
       this._reads.add(data)
     })
 
@@ -84,6 +87,7 @@ module.exports = class DebuggingStream extends Duplex {
   }
 
   _write (data, cb) {
+    this.bytesWritten += data.byteLength
     this._writes.add(data)
     cb(null)
   }
