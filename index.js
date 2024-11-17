@@ -30,6 +30,7 @@ class Queue {
       const next = this.pending.peek()
       if (!next || next.arriveBy > now) break
 
+      if (next.data) this.inflight -= next.data.byteLength
       this.ondrain(next.data)
       this.pending.shift()
     }
