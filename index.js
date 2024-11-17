@@ -1,101 +1,115 @@
 const { Duplex } = require('streamx')
+const FIFO = require('fast-fifo')
 
-module.exports = class DebuggingStream extends Duplex {
-  constructor (stream, { random = Math.random, latency = 0 } = {}) {
-    super()
-
-    this._random = random
-    this._latency = toRange(latency)
-
-    this._queued = []
-    this._ondrain = null
-
-    this.stream = stream
-
-    let ended = false
-
-    this.stream.on('data', (data) => {
-      this._queue({ pending: true, data, error: null, done: false })
-    })
-    this.stream.on('end', () => {
-      ended = true
-      this._queue({ pending: true, data: null, error: null, done: false })
-    })
-    this.stream.on('error', (err) => {
-      this._queue({ pending: true, data: null, error: err, done: true })
-    })
-    this.stream.on('close', () => {
-      if (ended) return
-      this._queue({ pending: true, data: null, error: null, done: true })
-    })
-    this.stream.on('drain', () => {
-      this._triggerDrain()
-    })
+class Queue {
+  constructor ({ latency = 0, speed = Infinity, jitter = 0, ondrain } = {}) {
+    this.latency = latency
+    this.speed = speed
+    this.jitter = jitter
+    this.pending = new FIFO()
+    this.inflight = 0
+    this.timeout = null
+    this.ondrain = ondrain
   }
 
-  _triggerDrain () {
-    if (this._ondrain === null) return
-    const ondrain = this._ondrain
-    this._ondrain = null
-    ondrain()
-  }
+  add (data) {
+    const latency = Math.round((Math.random() * this.jitter) + this.latency)
 
-  _queue (evt) {
-    const l = this._latency.start + Math.round(this._random() * this._latency.variance)
+    if (data) this.inflight += data.byteLength
+    this.pending.push({ arriveBy: Date.now() + latency + Math.ceil(1000 * this.inflight / this.speed), data })
 
-    this._queued.push(evt)
-
-    setTimeout(() => {
-      evt.pending = false
-      this._drain()
-    }, l)
+    if (this.timeout === null) this._drain()
   }
 
   _drain () {
-    let paused = false
-    while (this._queued.length > 0 && this._queued[0].pending === false) {
-      const q = this._queued.shift()
+    this.timeout = null
 
-      if (q.done) {
-        this.destroy(q.error)
-        continue
-      }
+    const now = Date.now()
 
-      if (this.push(q.data) === false) {
-        paused = true
-      }
+    while (true) {
+      const next = this.pending.peek()
+      if (!next || next.arriveBy > now) break
+
+      this.ondrain(next.data)
+      this.pending.shift()
     }
 
-    if (paused) this.stream.pause()
+    const next = this.pending.peek()
+    if (!next) return
+
+    this.timeout = setTimeout(this._drain.bind(this), Math.max(next.arriveBy - now, 0))
   }
 
-  _read (cb) {
-    this.stream.resume()
-    cb(null)
+  destroy () {
+    clearTimeout(this.timeout)
+    this.timeout = null
+  }
+}
+
+module.exports = class DebuggingStream extends Duplex {
+  constructor (stream, { speed = Infinity, writeSpeed = speed, readSpeed = speed, latency = 0, jitter = 0 } = {}) {
+    super()
+
+    this.stream = stream
+    this.latency = latency
+    this.jitter = jitter
+    this.writeSpeed = writeSpeed
+    this.readSpeed = readSpeed
+    this.udx = true // for hypercore
+
+    this._writes = new Queue({ speed: writeSpeed, latency, jitter, ondrain: this._onwrite.bind(this) })
+    this._reads = new Queue({ speed: readSpeed, latency, jitter, ondrain: this._onread.bind(this) })
+    this._finalCallback = null
+
+    stream.on('data', (data) => {
+      this._reads.add(data)
+    })
+
+    stream.on('end', () => {
+      this._reads.add(null)
+    })
+
+    stream.on('error', (err) => {
+      this.destroy(err)
+    })
   }
 
-  _predestroy () {
-    this._triggerDrain()
+  get rawStream () {
+    return this.stream.rawStream || this
+  }
+
+  get rtt () {
+    return this.latency + Math.round(Math.random() * this.jitter)
   }
 
   _write (data, cb) {
-    if (this.stream.write(data) === false) {
-      this._ondrain = cb
-      return
-    }
+    this._writes.add(data)
     cb(null)
   }
 
   _final (cb) {
-    this.stream.end()
-    cb()
-  }
-}
-
-function toRange (range) {
-  if (typeof range === 'number') {
-    range = [range, range]
+    this._writes.add(null)
+    this._finalCallback = cb
   }
 
-  return { start: range[0], variance: range[1] - range[0] }
+  _continueFinal () {
+    const cb = this._finalCallback
+    this._finalCallback = null
+    if (cb) cb(null)
+  }
+
+  _predestroy () {
+    this._continueFinal()
+    this._writes.destroy()
+    this._reads.destroy()
+  }
+
+  _onread (data) {
+    this.push(data)
+  }
+
+  _onwrite (data) {
+    if (data === null) this._continueFinal()
+    else this.stream.write(data)
+  }
 }
