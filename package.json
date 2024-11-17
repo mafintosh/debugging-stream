@@ -1,6 +1,6 @@
 {
   "name": "debugging-stream",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Debug streams, by adding latency, speed etc",
   "main": "index.js",
   "dependencies": {
