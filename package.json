@@ -8,5 +8,8 @@
     "streamx": "^2.20.2"
   },
   "author": "Mathias Buus",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "speedometer": "^1.1.0"
+  }
 }
