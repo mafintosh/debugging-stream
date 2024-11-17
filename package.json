@@ -3,6 +3,9 @@
   "version": "3.0.0",
   "description": "Debug streams, by adding latency, speed etc",
   "main": "index.js",
+  "files": [
+    "index.js"
+  ],
   "dependencies": {
     "fast-fifo": "^1.3.2",
     "streamx": "^2.20.2"
