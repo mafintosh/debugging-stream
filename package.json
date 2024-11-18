@@ -14,5 +14,13 @@
   "license": "MIT",
   "devDependencies": {
     "speedometer": "^1.1.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mafintosh/debugging-stream.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mafintosh/debugging-stream/issues"
+  },
+  "homepage": "https://github.com/mafintosh/debugging-stream#readme"
 }
